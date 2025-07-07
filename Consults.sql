@@ -80,7 +80,9 @@ JOIN Persona pe ON cpm.ci_medico = pe.ci
 -- 4. El WHERE filtra para mostrar solo médicos por encima del promedio.
 WHERE cpm.num_procedimientos > (SELECT avg_procs FROM Promedio_General)
 ORDER BY cpm.num_procedimientos DESC
-LIMIT 2;-- Consulta D: Trabajadores responsables de encargos a proveedores de Valencia
+LIMIT 2;
+
+-- Consulta D: Trabajadores responsables de encargos a proveedores de Valencia
 
 SELECT DISTINCT
     pe.nombre,
