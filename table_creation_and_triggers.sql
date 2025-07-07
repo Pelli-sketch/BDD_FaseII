@@ -1,309 +1,447 @@
-/*
- * SCRIPT DE CREACIÓN DE TABLAS Y TRIGGERS PARA GESTIÓN HOSPITALARIA (PostgreSQL)
- * Modelo optimizado y normalizado basado en el análisis de los requerimientos.
- */
+-- Borrar todas las tablas 
+DROP TABLE IF EXISTS Provee CASCADE;
+DROP TABLE IF EXISTS Encargo CASCADE;
+DROP TABLE IF EXISTS Inventario CASCADE;
+DROP TABLE IF EXISTS Cuentan_con CASCADE;
+DROP TABLE IF EXISTS Instrumental_Medico CASCADE;
+DROP TABLE IF EXISTS Suministro_Limpieza CASCADE;
+DROP TABLE IF EXISTS Medicamento CASCADE;
+DROP TABLE IF EXISTS Suministro_Desechable CASCADE;
+DROP TABLE IF EXISTS Equipo_Medico CASCADE;
+DROP TABLE IF EXISTS Insumo_Medico CASCADE;
+DROP TABLE IF EXISTS Proveedor CASCADE;
+DROP TABLE IF EXISTS Necesitan CASCADE;
+DROP TABLE IF EXISTS Se_realiza CASCADE;
+DROP TABLE IF EXISTS Tratamiento CASCADE;
+DROP TABLE IF EXISTS Operacion CASCADE;
+DROP TABLE IF EXISTS Consulta CASCADE;
+DROP TABLE IF EXISTS Emitida CASCADE;
+DROP TABLE IF EXISTS Factura CASCADE;
+DROP TABLE IF EXISTS Seguro_Medico CASCADE;
+DROP TABLE IF EXISTS Compania_Aseguradora CASCADE;
+DROP TABLE IF EXISTS Medicamentos_Reg CASCADE;
+DROP TABLE IF EXISTS Condicion_Paciente CASCADE;
+DROP TABLE IF EXISTS Paciente CASCADE;
+DROP TABLE IF EXISTS Horario_de_Atencion CASCADE;
+DROP TABLE IF EXISTS Trabaja_En CASCADE;
+DROP TABLE IF EXISTS Administrativo CASCADE;
+DROP TABLE IF EXISTS Medico CASCADE;
+DROP TABLE IF EXISTS TelefonosPersonal CASCADE;
+DROP TABLE IF EXISTS Personal CASCADE;
+DROP TABLE IF EXISTS Contratado CASCADE;
+DROP TABLE IF EXISTS Habitacion CASCADE;
+DROP TABLE IF EXISTS TelefonosDepartamento CASCADE;
+DROP TABLE IF EXISTS Departamento CASCADE;
+DROP TABLE IF EXISTS Hospital CASCADE;
+DROP TABLE IF EXISTS Persona CASCADE;
 
--- Limpieza inicial en orden inverso de dependencias
-DROP TABLE IF EXISTS Pago_Seguro;
-DROP TABLE IF EXISTS Factura;
-DROP TABLE IF EXISTS Evento_Usa_Insumo;
-DROP TABLE IF EXISTS Evento_Clinico;
-DROP TABLE IF EXISTS Encargo_Detalle;
-DROP TABLE IF EXISTS Encargo;
-DROP TABLE IF EXISTS Proveedor_Suministra;
-DROP TABLE IF EXISTS Inventario;
-DROP TABLE IF EXISTS Insumo_Medico;
-DROP TABLE IF EXISTS Proveedor;
-DROP TABLE IF EXISTS Afiliacion_Seguro;
-DROP TABLE IF EXISTS Aseguradora;
-DROP TABLE IF EXISTS Historial_Medico;
-DROP TABLE IF EXISTS Paciente;
-DROP TABLE IF EXISTS Cargo_Historial;
-DROP TABLE IF EXISTS Horario_Trabajo;
-DROP TABLE IF EXISTS Telefono_Personal;
-DROP TABLE IF EXISTS Personal;
-DROP TABLE IF EXISTS Persona;
-DROP TABLE IF EXISTS Telefono_Departamento;
-DROP TABLE IF EXISTS Habitacion;
-DROP TABLE IF EXISTS Departamento;
-DROP TABLE IF EXISTS Hospital;
-
--- ========= ENTIDADES FUERTES Y PRINCIPALES =========
-
+-- Creación de las tablas
 CREATE TABLE Hospital (
     id_hospital SERIAL PRIMARY KEY,
-    nombre TEXT NOT NULL UNIQUE,
-    direccion TEXT NOT NULL,
-    num_camas INTEGER NOT NULL DEFAULT 0 -- Atributo derivado, gestionado por trigger
+    nombre VARCHAR(100) NOT NULL,
+    estado_hos VARCHAR(50),
+    ciudad_hos VARCHAR(50),
+    calle_hos VARCHAR(100),
+    cod_postal_hos VARCHAR(10),
+    num_camas INTEGER NOT NULL CHECK (num_camas >= 0)
+);
+
+CREATE TABLE Departamento (
+    id_departamento SERIAL PRIMARY KEY,
+    id_hospital INTEGER NOT NULL,
+    nombre VARCHAR(100) NOT NULL,
+    piso INTEGER,
+    tipo VARCHAR(50) NOT NULL CHECK (tipo IN ('medico', 'administrativo', 'operativo')),
+    FOREIGN KEY (id_hospital) REFERENCES Hospital (id_hospital) ON DELETE CASCADE
+);
+
+CREATE TABLE TelefonosDepartamento (
+    id_departamento INTEGER NOT NULL,
+    telefono VARCHAR(20) NOT NULL, 
+    PRIMARY KEY (id_departamento, telefono),
+    FOREIGN KEY (id_departamento) REFERENCES Departamento (id_departamento) ON DELETE CASCADE
+);
+
+CREATE TABLE Habitacion (
+    num_habitacion INTEGER NOT NULL,
+    id_hospital INTEGER NOT NULL,
+    id_departamento INTEGER NOT NULL,
+    ocupado BOOLEAN DEFAULT FALSE,
+    num_camas INTEGER NOT NULL CHECK (num_camas > 0),
+    tarifa NUMERIC(10, 2) NOT NULL CHECK (tarifa >= 0),
+    tipo VARCHAR(50) NOT NULL CHECK (tipo IN ('individual', 'compartida')),
+    PRIMARY KEY (num_habitacion, id_hospital, id_departamento),
+    FOREIGN KEY (id_hospital) REFERENCES Hospital (id_hospital) ON DELETE CASCADE,
+    FOREIGN KEY (id_departamento) REFERENCES Departamento (id_departamento) ON DELETE CASCADE
 );
 
 CREATE TABLE Persona (
-    ci TEXT PRIMARY KEY,
-    nombre TEXT NOT NULL,
-    apellido TEXT NOT NULL,
+    ci VARCHAR(20) PRIMARY KEY,
     fecha_nacimiento DATE NOT NULL,
-    direccion TEXT NOT NULL,
-    sexo CHAR(1) NOT NULL CHECK (sexo IN ('M', 'F'))
+    estado_per VARCHAR(50),
+    ciudad_per VARCHAR(50),
+    calle_per VARCHAR(100),
+    cod_postal_per VARCHAR(10),
+    sexo CHAR(1) NOT NULL CHECK (sexo IN ('M', 'F', 'N/A')), 
+    nombre VARCHAR(100) NOT NULL,
+    apellido VARCHAR(100) NOT NULL
 );
 
-CREATE TABLE Aseguradora (
-    id_aseguradora SERIAL PRIMARY KEY,
-    nombre TEXT NOT NULL UNIQUE,
-    direccion TEXT,
-    telefono TEXT
+CREATE TABLE Contratado (
+    ci VARCHAR(20) PRIMARY KEY,
+    id_departamento INTEGER NOT NULL,
+    id_hospital INTEGER NOT NULL,
+    fecha_contratacion DATE NOT NULL,
+    cargo VARCHAR(100) NOT NULL,
+    fecha_retiro DATE,
+    salario NUMERIC(12, 2) NOT NULL CHECK (salario >= 0),
+    FOREIGN KEY (ci) REFERENCES Persona (ci) ON DELETE CASCADE,
+    FOREIGN KEY (id_departamento) REFERENCES Departamento (id_departamento) ON DELETE CASCADE,
+    FOREIGN KEY (id_hospital) REFERENCES Hospital (id_hospital) ON DELETE CASCADE,
+    CHECK (fecha_retiro IS NULL OR fecha_retiro >= fecha_contratacion)
+);
+
+CREATE TABLE Personal (
+    ci VARCHAR(20) PRIMARY KEY,
+    id_departamento INTEGER NOT NULL,
+    annios_serv INTEGER NOT NULL CHECK (annios_serv >= 0),
+    FOREIGN KEY (ci) REFERENCES Contratado (ci) ON DELETE CASCADE,
+    FOREIGN KEY (id_departamento) REFERENCES Departamento (id_departamento) ON DELETE CASCADE
+);
+
+CREATE TABLE TelefonosPersonal (
+    ci VARCHAR(20) NOT NULL,
+    telefono VARCHAR(20) NOT NULL,
+    PRIMARY KEY (ci, telefono),
+    FOREIGN KEY (ci) REFERENCES Personal (ci) ON DELETE CASCADE
+);
+
+CREATE TABLE Medico (
+    ci VARCHAR(20) PRIMARY KEY,
+    especialidad VARCHAR(100) NOT NULL,
+    FOREIGN KEY (ci) REFERENCES Personal (ci) ON DELETE CASCADE
+);
+
+CREATE TABLE Administrativo (
+    ci VARCHAR(20) PRIMARY KEY,
+    FOREIGN KEY (ci) REFERENCES Personal (ci) ON DELETE CASCADE
+);
+
+CREATE TABLE Horario_de_Atencion (
+    id_horario SERIAL PRIMARY KEY,
+    id_departamento INTEGER NOT NULL,
+    hora_comienzo TIME NOT NULL,
+    dia CHAR(2) NOT NULL CHECK (dia IN ('L', 'M', 'Mi', 'J', 'V', 'S', 'D')),
+    hora_finalizacion TIME NOT NULL,
+    FOREIGN KEY (id_departamento) REFERENCES Departamento (id_departamento) ON DELETE CASCADE,
+    CHECK (hora_finalizacion > hora_comienzo)
+);
+
+CREATE TABLE Trabaja_En (
+    id_horario INTEGER NOT NULL,
+    id_departamento INTEGER NOT NULL,
+    id_hospital INTEGER NOT NULL,
+    ci VARCHAR(20) NOT NULL,
+    PRIMARY KEY (id_horario, id_departamento, id_hospital, ci),
+    FOREIGN KEY (id_horario) REFERENCES Horario_de_Atencion (id_horario) ON DELETE CASCADE,
+    FOREIGN KEY (id_departamento) REFERENCES Departamento (id_departamento) ON DELETE CASCADE,
+    FOREIGN KEY (id_hospital) REFERENCES Hospital (id_hospital) ON DELETE CASCADE,
+    FOREIGN KEY (ci) REFERENCES Personal (ci) ON DELETE CASCADE
+);
+
+CREATE TABLE Compania_Aseguradora (
+    nombre_aseguradora VARCHAR(100) PRIMARY KEY,
+    estado_comp VARCHAR(50),
+    ciudad_comp VARCHAR(50),
+    calle_comp VARCHAR(100),
+    cod_postal_comp VARCHAR(10),
+    telefono VARCHAR(20) NOT NULL
+);
+
+CREATE TABLE Seguro_Medico (
+    num_poliza VARCHAR(50) PRIMARY KEY,
+    nombre_aseguradora VARCHAR(100) NOT NULL,
+    ci VARCHAR(20) NOT NULL, 
+    suma_asg NUMERIC(12, 2) NOT NULL CHECK (suma_asg >= 0),
+    condiciones TEXT,
+    FOREIGN KEY (nombre_aseguradora) REFERENCES Compania_Aseguradora (nombre_aseguradora) ON DELETE RESTRICT,
+    FOREIGN KEY (ci) REFERENCES Persona (ci) ON DELETE CASCADE
+);
+
+CREATE TABLE Factura (
+    num_factura SERIAL PRIMARY KEY,
+    num_poliza VARCHAR(50),
+    metodo VARCHAR(50) NOT NULL CHECK (metodo IN ('transferencia', 'efectivo', 'punto de venta', 'mixto')),
+    fecha DATE NOT NULL,
+    monto NUMERIC(12, 2) NOT NULL CHECK (monto >= 0),
+    estado VARCHAR(50) NOT NULL CHECK (estado IN ('Pendiente', 'Pagada', 'Cancelada', 'Reembolsada')),
+    monto_pagado NUMERIC(12, 2) CHECK (monto_pagado >= 0),
+    cobertura NUMERIC(5, 2) CHECK (cobertura >= 0 AND cobertura <= 100),
+    FOREIGN KEY (num_poliza) REFERENCES Seguro_Medico (num_poliza) ON DELETE SET NULL
+);
+
+CREATE TABLE Paciente (
+    ci VARCHAR(20) PRIMARY KEY,
+    id_medicamento_reg INTEGER,
+    id_condicion INTEGER,
+    edad INTEGER NOT NULL CHECK (edad >= 0),
+    requiere_resp BOOLEAN NOT NULL,
+    contacto_emerg VARCHAR(100),
+    telefono VARCHAR(20) NOT NULL,
+    FOREIGN KEY (ci) REFERENCES Persona (ci) ON DELETE CASCADE
+);
+
+CREATE TABLE Condicion_Paciente (
+    id_condicion SERIAL PRIMARY KEY,
+    ci_paciente VARCHAR(20) NOT NULL,
+    nombre_condicion VARCHAR(100) NOT NULL,
+    descripcion_condicion TEXT,
+    tipo_condicion VARCHAR(100),
+    fecha_diagnostico DATE NOT NULL,
+    FOREIGN KEY (ci_paciente) REFERENCES Paciente (ci) ON DELETE CASCADE
+);
+
+CREATE TABLE Medicamentos_Reg (
+    id_medicamento_reg SERIAL PRIMARY KEY,
+    ci_paciente VARCHAR(20) NOT NULL,
+    id_insumo_medicamento INTEGER,
+    dosis_medicamento VARCHAR(50),
+    via_administracion VARCHAR(50),
+    inicio_medicamento DATE NOT NULL,
+    fin_medicamento DATE,
+    FOREIGN KEY (ci_paciente) REFERENCES Paciente (ci) ON DELETE CASCADE
+);
+
+-- Añadir FKs faltantes en Paciente (ahora que Condicion_Paciente y Medicamentos_Reg están definidos)
+ALTER TABLE Paciente
+ADD CONSTRAINT fk_id_medicamento_reg
+FOREIGN KEY (id_medicamento_reg) REFERENCES Medicamentos_Reg (id_medicamento_reg) ON DELETE SET NULL,
+ADD CONSTRAINT fk_id_condicion
+FOREIGN KEY (id_condicion) REFERENCES Condicion_Paciente (id_condicion) ON DELETE SET NULL;
+
+CREATE TABLE Emitida (
+    num_factura INTEGER NOT NULL,
+    ci_paciente VARCHAR(20) NOT NULL,
+    ci_administrativo VARCHAR(20) NOT NULL,
+    PRIMARY KEY (num_factura, ci_paciente, ci_administrativo),
+    FOREIGN KEY (num_factura) REFERENCES Factura (num_factura) ON DELETE CASCADE,
+    FOREIGN KEY (ci_paciente) REFERENCES Paciente (ci) ON DELETE CASCADE,
+    FOREIGN KEY (ci_administrativo) REFERENCES Administrativo (ci) ON DELETE CASCADE
+);
+
+CREATE TABLE Procedimiento (
+    id_procedimiento SERIAL PRIMARY KEY,
+    nombre VARCHAR(150) NOT NULL,
+    instrucciones TEXT,
+    precio NUMERIC(10, 2) NOT NULL CHECK (precio >= 0)
+);
+
+CREATE TABLE Consulta (
+    id_consulta SERIAL PRIMARY KEY,
+    hora TIME NOT NULL,
+    fecha DATE NOT NULL,
+    ci_medico VARCHAR(20) NOT NULL,
+    ci_paciente VARCHAR(20) NOT NULL,
+    id_procedimiento INTEGER,
+    precio_consulta NUMERIC(10, 2) NOT NULL CHECK (precio_consulta >= 0),
+    observaciones TEXT,
+    total NUMERIC(10, 2) NOT NULL CHECK (total >= 0),
+    FOREIGN KEY (ci_medico) REFERENCES Medico (ci) ON DELETE RESTRICT,
+    FOREIGN KEY (ci_paciente) REFERENCES Paciente (ci) ON DELETE RESTRICT,
+    FOREIGN KEY (id_procedimiento) REFERENCES Procedimiento (id_procedimiento) ON DELETE SET NULL
+);
+
+CREATE TABLE Operacion (
+    id_procedimiento INTEGER PRIMARY KEY,
+    id_departamento INTEGER NOT NULL,
+    id_hospital INTEGER NOT NULL,
+    ci_med VARCHAR(20) NOT NULL,
+    ci_paciente VARCHAR(20) NOT NULL,
+    num_habitacion INTEGER NOT NULL,
+    total NUMERIC(10, 2) NOT NULL CHECK (total >= 0),
+    hora_operacion TIME NOT NULL,
+    fecha DATE NOT NULL,
+    duracion_estimada INTERVAL,
+    FOREIGN KEY (id_procedimiento) REFERENCES Procedimiento (id_procedimiento) ON DELETE CASCADE,
+    FOREIGN KEY (id_departamento) REFERENCES Departamento (id_departamento) ON DELETE RESTRICT,
+    FOREIGN KEY (id_hospital) REFERENCES Hospital (id_hospital) ON DELETE RESTRICT,
+    FOREIGN KEY (ci_med) REFERENCES Medico (ci) ON DELETE RESTRICT,
+    FOREIGN KEY (ci_paciente) REFERENCES Paciente (ci) ON DELETE RESTRICT,
+    FOREIGN KEY (num_habitacion, id_hospital, id_departamento) REFERENCES Habitacion (num_habitacion, id_hospital, id_departamento) ON DELETE RESTRICT
+);
+
+CREATE TABLE Tratamiento (
+    id_procedimiento INTEGER PRIMARY KEY,
+    tipo VARCHAR(100) NOT NULL,
+    FOREIGN KEY (id_procedimiento) REFERENCES Procedimiento (id_procedimiento) ON DELETE CASCADE
 );
 
 CREATE TABLE Proveedor (
-    id_proveedor SERIAL PRIMARY KEY,
-    nombre_empresa TEXT NOT NULL UNIQUE,
-    direccion TEXT,
-    ciudad TEXT,
-    telefono TEXT,
-    email TEXT UNIQUE
+    nombre_compania VARCHAR(100) PRIMARY KEY,
+    telefono_proveedor VARCHAR(20), 
+    correo_proveedor VARCHAR(100),
+    estado_prov VARCHAR(50),
+    ciudad_prov VARCHAR(50),
+    calle_prov VARCHAR(100),
+    cod_postal_prov VARCHAR(10)
 );
 
 CREATE TABLE Insumo_Medico (
     id_insumo SERIAL PRIMARY KEY,
-    nombre TEXT NOT NULL UNIQUE,
+    nombre_compania VARCHAR(100) NOT NULL,
     descripcion TEXT,
-    tipo TEXT NOT NULL CHECK (tipo IN ('Medicamento', 'Instrumental', 'Suministro', 'Equipo')),
-    -- Atributos adicionales para especializaciones
-    unidad_medida TEXT,
-    fecha_vencimiento DATE, -- Solo para Medicamentos
-    material TEXT -- Solo para Instrumental
+    stock INTEGER NOT NULL CHECK (stock >= 0),
+    nombre VARCHAR(100) NOT NULL,
+    precio NUMERIC(10, 2) NOT NULL CHECK (precio >= 0),
+    tipo_insumo VARCHAR(50),
+    FOREIGN KEY (nombre_compania) REFERENCES Proveedor (nombre_compania) ON DELETE RESTRICT
 );
 
--- ========= ENTIDADES DÉBILES Y ESPECIALIZACIONES =========
-
-CREATE TABLE Departamento (
-    numero_departamento INTEGER NOT NULL,
-    id_hospital INTEGER NOT NULL,
-    nombre TEXT NOT NULL,
-    piso INTEGER NOT NULL,
-    tipo TEXT NOT NULL CHECK (tipo IN ('Medico', 'Administrativo', 'Apoyo')),
-    PRIMARY KEY (id_hospital, numero_departamento),
-    FOREIGN KEY (id_hospital) REFERENCES Hospital(id_hospital) ON DELETE CASCADE
+CREATE TABLE Equipo_Medico (
+    id_insumo INTEGER PRIMARY KEY,
+    FOREIGN KEY (id_insumo) REFERENCES Insumo_Medico (id_insumo) ON DELETE CASCADE
 );
 
-CREATE TABLE Habitacion (
-    id_habitacion SERIAL PRIMARY KEY,
-    numero_habitacion INTEGER NOT NULL,
-    id_hospital INTEGER NOT NULL,
-    numero_departamento INTEGER NOT NULL,
-    tipo TEXT NOT NULL CHECK (tipo IN ('Individual', 'Doble', 'Suite')),
-    num_camas INTEGER NOT NULL CHECK (num_camas > 0),
-    tarifa_dia NUMERIC(10, 2) NOT NULL CHECK (tarifa_dia >= 0),
-    ocupada BOOLEAN NOT NULL DEFAULT FALSE,
-    FOREIGN KEY (id_hospital, numero_departamento) REFERENCES Departamento(id_hospital, numero_departamento) ON DELETE CASCADE,
-    UNIQUE (id_hospital, numero_departamento, numero_habitacion)
+CREATE TABLE Suministro_Desechable (
+    id_insumo INTEGER PRIMARY KEY,
+    FOREIGN KEY (id_insumo) REFERENCES Insumo_Medico (id_insumo) ON DELETE CASCADE
 );
 
-CREATE TABLE Personal (
-    ci_personal TEXT PRIMARY KEY,
-    fecha_contratacion DATE NOT NULL,
-    salario NUMERIC(10, 2) NOT NULL CHECK (salario >= 0),
-    tipo TEXT NOT NULL CHECK (tipo IN ('Medico', 'Administrativo')),
-    especialidad TEXT, -- Solo para Medicos
-    id_hospital_actual INTEGER,
-    numero_departamento_actual INTEGER,
-    FOREIGN KEY (ci_personal) REFERENCES Persona(ci) ON DELETE CASCADE,
-    FOREIGN KEY (id_hospital_actual, numero_departamento_actual) REFERENCES Departamento(id_hospital, numero_departamento) ON DELETE SET NULL,
-    CHECK ((tipo = 'Medico' AND especialidad IS NOT NULL) OR (tipo <> 'Medico' AND especialidad IS NULL))
+CREATE TABLE Medicamento (
+    id_insumo INTEGER PRIMARY KEY,
+    fecha_vencimiento DATE,
+    presentacion VARCHAR(50) CHECK (presentacion IN ('Tabletas', 'Cápsulas', 'Jarabe', 'Inyectable', 'Pomada', 'Polvo', 'Suspensión')),
+    FOREIGN KEY (id_insumo) REFERENCES Insumo_Medico (id_insumo) ON DELETE CASCADE
 );
 
-CREATE TABLE Paciente (
-    ci_paciente TEXT PRIMARY KEY,
-    telefono TEXT,
-    contacto_emergencia TEXT,
-    telefono_emergencia TEXT,
-    responsable_nombre TEXT, -- Para menores de edad
-    responsable_telefono TEXT,
-    FOREIGN KEY (ci_paciente) REFERENCES Persona(ci) ON DELETE CASCADE
+CREATE TABLE Suministro_Limpieza (
+    id_insumo INTEGER PRIMARY KEY,
+    tipo_suministro VARCHAR(50) CHECK (tipo_suministro IN ('Desinfectante', 'Detergente', 'Jabón', 'Alcohol', 'Guantes', 'Toallas', 'Mascarillas')),
+    FOREIGN KEY (id_insumo) REFERENCES Insumo_Medico (id_insumo) ON DELETE CASCADE
 );
 
--- ========= TABLAS PARA ATRIBUTOS MULTIVALUADOS =========
-
-CREATE TABLE Telefono_Personal (
-    ci_personal TEXT NOT NULL,
-    telefono TEXT NOT NULL,
-    PRIMARY KEY (ci_personal, telefono),
-    FOREIGN KEY (ci_personal) REFERENCES Personal(ci_personal) ON DELETE CASCADE
+CREATE TABLE Instrumental_Medico (
+    id_insumo INTEGER PRIMARY KEY,
+    material VARCHAR(100),
+    FOREIGN KEY (id_insumo) REFERENCES Insumo_Medico (id_insumo) ON DELETE CASCADE
 );
 
-CREATE TABLE Telefono_Departamento (
-    id_hospital INTEGER NOT NULL,
-    numero_departamento INTEGER NOT NULL,
-    telefono TEXT NOT NULL,
-    PRIMARY KEY (id_hospital, numero_departamento, telefono),
-    FOREIGN KEY (id_hospital, numero_departamento) REFERENCES Departamento(id_hospital, numero_departamento) ON DELETE CASCADE
+ALTER TABLE Medicamentos_Reg
+ADD CONSTRAINT fk_id_insumo_medicamento
+FOREIGN KEY (id_insumo_medicamento) REFERENCES Medicamento (id_insumo) ON DELETE SET NULL;
+
+CREATE TABLE Necesitan (
+    id_procedimiento INTEGER NOT NULL,
+    id_insumo INTEGER NOT NULL,
+    PRIMARY KEY (id_procedimiento, id_insumo),
+    FOREIGN KEY (id_procedimiento) REFERENCES Procedimiento (id_procedimiento) ON DELETE CASCADE,
+    FOREIGN KEY (id_insumo) REFERENCES Insumo_Medico (id_insumo) ON DELETE CASCADE
 );
 
-CREATE TABLE Horario_Trabajo (
-    id_horario SERIAL PRIMARY KEY,
-    ci_personal TEXT NOT NULL,
-    dia_semana TEXT NOT NULL CHECK (dia_semana IN ('Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes', 'Sabado', 'Domingo')),
-    hora_entrada TIME NOT NULL,
-    hora_salida TIME NOT NULL,
-    FOREIGN KEY (ci_personal) REFERENCES Personal(ci_personal) ON DELETE CASCADE
-);
-
-CREATE TABLE Historial_Medico (
-    id_historial SERIAL PRIMARY KEY,
-    ci_paciente TEXT NOT NULL,
+CREATE TABLE Se_realiza (
+    id_realizacion SERIAL PRIMARY KEY,
+    hora_operacion TIME NOT NULL,
     fecha DATE NOT NULL,
-    tipo TEXT NOT NULL,
-    descripcion TEXT NOT NULL,
-    FOREIGN KEY (ci_paciente) REFERENCES Paciente(ci_paciente) ON DELETE CASCADE
+    id_departamento INTEGER NOT NULL,
+    id_hospital INTEGER NOT NULL,
+    id_procedimiento INTEGER NOT NULL,
+    ci_med VARCHAR(20) NOT NULL,
+    ci_paciente VARCHAR(20) NOT NULL,
+    num_habitacion INTEGER NOT NULL,
+    total NUMERIC(10, 2) NOT NULL CHECK (total >= 0),
+    FOREIGN KEY (id_departamento) REFERENCES Departamento (id_departamento) ON DELETE RESTRICT,
+    FOREIGN KEY (id_hospital) REFERENCES Hospital (id_hospital) ON DELETE RESTRICT,
+    FOREIGN KEY (id_procedimiento) REFERENCES Procedimiento (id_procedimiento) ON DELETE RESTRICT,
+    FOREIGN KEY (ci_med) REFERENCES Medico (ci) ON DELETE RESTRICT,
+    FOREIGN KEY (ci_paciente) REFERENCES Paciente (ci) ON DELETE RESTRICT,
+    FOREIGN KEY (num_habitacion, id_hospital, id_departamento) REFERENCES Habitacion (num_habitacion, id_hospital, id_departamento) ON DELETE RESTRICT
 );
 
--- ========= TABLAS DE RELACIONES Y TRANSACCIONES =========
-
-CREATE TABLE Cargo_Historial (
-    id_cargo SERIAL PRIMARY KEY,
-    ci_personal TEXT NOT NULL,
-    cargo TEXT NOT NULL,
+CREATE TABLE Cuentan_con (
+    id_insumo INTEGER NOT NULL,
+    ci_resp VARCHAR(20),
     id_hospital INTEGER NOT NULL,
-    numero_departamento INTEGER NOT NULL,
-    fecha_inicio DATE NOT NULL,
-    fecha_fin DATE,
-    FOREIGN KEY (ci_personal) REFERENCES Personal(ci_personal) ON DELETE CASCADE,
-    FOREIGN KEY (id_hospital, numero_departamento) REFERENCES Departamento(id_hospital, numero_departamento) ON DELETE CASCADE
+    id_departamento INTEGER NOT NULL,
+    PRIMARY KEY (id_insumo, id_hospital, id_departamento),
+    FOREIGN KEY (id_insumo) REFERENCES Equipo_Medico (id_insumo) ON DELETE CASCADE,
+    FOREIGN KEY (ci_resp) REFERENCES Medico (ci) ON DELETE SET NULL,
+    FOREIGN KEY (id_hospital) REFERENCES Hospital (id_hospital) ON DELETE RESTRICT,
+    FOREIGN KEY (id_departamento) REFERENCES Departamento (id_departamento) ON DELETE RESTRICT
 );
 
 CREATE TABLE Inventario (
     id_hospital INTEGER NOT NULL,
     id_insumo INTEGER NOT NULL,
-    cantidad INTEGER NOT NULL DEFAULT 0 CHECK (cantidad >= 0),
-    stock_minimo INTEGER NOT NULL DEFAULT 10,
+    cantidad INTEGER NOT NULL CHECK (cantidad >= 0),
     PRIMARY KEY (id_hospital, id_insumo),
-    FOREIGN KEY (id_hospital) REFERENCES Hospital(id_hospital) ON DELETE CASCADE,
-    FOREIGN KEY (id_insumo) REFERENCES Insumo_Medico(id_insumo) ON DELETE CASCADE
-);
-
-CREATE TABLE Proveedor_Suministra (
-    id_proveedor INTEGER NOT NULL,
-    id_insumo INTEGER NOT NULL,
-    precio_unitario NUMERIC(10, 2) NOT NULL CHECK (precio_unitario > 0),
-    PRIMARY KEY (id_proveedor, id_insumo),
-    FOREIGN KEY (id_proveedor) REFERENCES Proveedor(id_proveedor) ON DELETE CASCADE,
-    FOREIGN KEY (id_insumo) REFERENCES Insumo_Medico(id_insumo) ON DELETE CASCADE
+    FOREIGN KEY (id_hospital) REFERENCES Hospital (id_hospital) ON DELETE CASCADE,
+    FOREIGN KEY (id_insumo) REFERENCES Insumo_Medico (id_insumo) ON DELETE CASCADE
 );
 
 CREATE TABLE Encargo (
-    id_encargo SERIAL PRIMARY KEY,
-    id_hospital INTEGER NOT NULL,
-    id_proveedor INTEGER NOT NULL,
-    ci_responsable TEXT NOT NULL,
-    fecha_encargo DATE NOT NULL DEFAULT CURRENT_DATE,
-    fecha_recepcion DATE,
-    estado TEXT NOT NULL DEFAULT 'Pendiente' CHECK (estado IN ('Pendiente', 'Recibido', 'Cancelado')),
-    FOREIGN KEY (id_hospital) REFERENCES Hospital(id_hospital) ON DELETE RESTRICT,
-    FOREIGN KEY (id_proveedor) REFERENCES Proveedor(id_proveedor) ON DELETE RESTRICT,
-    FOREIGN KEY (ci_responsable) REFERENCES Personal(ci_personal) ON DELETE RESTRICT
-);
-
-CREATE TABLE Encargo_Detalle (
-    id_encargo INTEGER NOT NULL,
-    id_insumo INTEGER NOT NULL,
-    cantidad INTEGER NOT NULL CHECK (cantidad > 0),
-    precio_unitario NUMERIC(10, 2) NOT NULL CHECK (precio_unitario >= 0),
-    PRIMARY KEY (id_encargo, id_insumo),
-    FOREIGN KEY (id_encargo) REFERENCES Encargo(id_encargo) ON DELETE CASCADE,
-    FOREIGN KEY (id_insumo) REFERENCES Insumo_Medico(id_insumo) ON DELETE RESTRICT
-);
-
-CREATE TABLE Evento_Clinico (
-    id_evento SERIAL PRIMARY KEY,
-    tipo TEXT NOT NULL CHECK (tipo IN ('Consulta', 'Operacion', 'Procedimiento')),
+    num_encargo SERIAL PRIMARY KEY,
     fecha DATE NOT NULL,
-    hora TIME NOT NULL,
-    descripcion TEXT,
-    costo NUMERIC(10, 2) NOT NULL DEFAULT 0 CHECK (costo >= 0),
-    ci_paciente TEXT NOT NULL,
-    ci_medico TEXT NOT NULL,
-    id_hospital INTEGER NOT NULL,
-    id_habitacion INTEGER, -- Puede ser una consulta ambulatoria
-    FOREIGN KEY (ci_paciente) REFERENCES Paciente(ci_paciente) ON DELETE RESTRICT,
-    FOREIGN KEY (ci_medico) REFERENCES Personal(ci_personal) ON DELETE RESTRICT,
-    FOREIGN KEY (id_hospital) REFERENCES Hospital(id_hospital) ON DELETE RESTRICT,
-    FOREIGN KEY (id_habitacion) REFERENCES Habitacion(id_habitacion) ON DELETE SET NULL
-);
-
-CREATE TABLE Evento_Usa_Insumo (
-    id_evento INTEGER NOT NULL,
+    ci_resp VARCHAR(20) NOT NULL,
     id_insumo INTEGER NOT NULL,
+    nombre_compania VARCHAR(100) NOT NULL,
+    id_hospital INTEGER NOT NULL,
     cantidad INTEGER NOT NULL CHECK (cantidad > 0),
-    PRIMARY KEY (id_evento, id_insumo),
-    FOREIGN KEY (id_evento) REFERENCES Evento_Clinico(id_evento) ON DELETE CASCADE,
-    FOREIGN KEY (id_insumo) REFERENCES Insumo_Medico(id_insumo) ON DELETE RESTRICT
+    num_lote VARCHAR(50),
+    costo_total NUMERIC(12, 2) NOT NULL CHECK (costo_total >= 0),
+    FOREIGN KEY (ci_resp) REFERENCES Administrativo (ci) ON DELETE RESTRICT,
+    FOREIGN KEY (id_insumo) REFERENCES Insumo_Medico (id_insumo) ON DELETE RESTRICT,
+    FOREIGN KEY (nombre_compania) REFERENCES Proveedor (nombre_compania) ON DELETE RESTRICT,
+    FOREIGN KEY (id_hospital) REFERENCES Hospital (id_hospital) ON DELETE RESTRICT
 );
 
-CREATE TABLE Afiliacion_Seguro (
-    id_afiliacion SERIAL PRIMARY KEY,
-    numero_poliza TEXT NOT NULL UNIQUE,
-    ci_paciente TEXT NOT NULL,
-    id_aseguradora INTEGER NOT NULL,
-    fecha_inicio DATE NOT NULL,
-    fecha_fin DATE,
-    monto_cobertura NUMERIC(12, 2) CHECK (monto_cobertura >= 0),
-    FOREIGN KEY (ci_paciente) REFERENCES Paciente(ci_paciente) ON DELETE CASCADE,
-    FOREIGN KEY (id_aseguradora) REFERENCES Aseguradora(id_aseguradora) ON DELETE RESTRICT
-);
-
-CREATE TABLE Factura (
-    id_factura SERIAL PRIMARY KEY,
-    id_evento INTEGER NOT NULL UNIQUE, -- Una factura por evento
-    fecha_emision DATE NOT NULL DEFAULT CURRENT_DATE,
-    subtotal NUMERIC(10, 2) NOT NULL,
-    iva NUMERIC(10, 2) NOT NULL DEFAULT 0,
-    total NUMERIC(10, 2) NOT NULL,
-    estado TEXT NOT NULL DEFAULT 'Pendiente' CHECK (estado IN ('Pendiente', 'Pagada', 'Anulada')),
-    metodo_pago TEXT CHECK (metodo_pago IN ('Efectivo', 'Tarjeta', 'Seguro', 'Mixto')),
-    FOREIGN KEY (id_evento) REFERENCES Evento_Clinico(id_evento) ON DELETE RESTRICT
-);
-
-CREATE TABLE Pago_Seguro (
-    id_pago SERIAL PRIMARY KEY,
-    id_factura INTEGER NOT NULL,
-    id_afiliacion INTEGER NOT NULL,
-    monto_cubierto NUMERIC(10, 2) NOT NULL,
-    fecha_pago DATE NOT NULL DEFAULT CURRENT_DATE,
-    numero_autorizacion TEXT UNIQUE,
-    FOREIGN KEY (id_factura) REFERENCES Factura(id_factura) ON DELETE RESTRICT,
-    FOREIGN KEY (id_afiliacion) REFERENCES Afiliacion_Seguro(id_afiliacion) ON DELETE RESTRICT
+CREATE TABLE Provee (
+    id_insumo INTEGER NOT NULL,
+    nombre_compania VARCHAR(100) NOT NULL,
+    precio NUMERIC(10, 2) NOT NULL CHECK (precio >= 0),
+    PRIMARY KEY (id_insumo, nombre_compania),
+    FOREIGN KEY (id_insumo) REFERENCES Insumo_Medico (id_insumo) ON DELETE CASCADE,
+    FOREIGN KEY (nombre_compania) REFERENCES Proveedor (nombre_compania) ON DELETE CASCADE
 );
 
 
 -- ========================= TRIGGERS =========================
-
 -- TRIGGER 1: Actualizar el stock de un insumo en un hospital al recibir un encargo.
-CREATE OR REPLACE FUNCTION trg_actualizar_stock_al_recibir()
-RETURNS TRIGGER AS $$
-DECLARE
-    v_id_hospital INTEGER;
-BEGIN
-    IF NEW.estado = 'Recibido' AND OLD.estado <> 'Recibido' THEN
-        -- Obtener el hospital del encargo
-        SELECT id_hospital INTO v_id_hospital FROM Encargo WHERE id_encargo = NEW.id_encargo;
+CREATE OR REPLACE FUNCTION trg_actualizar_stock_al_recibir_encargo()
+    RETURNS TRIGGER AS $$
+    BEGIN
+        -- Actualizar el stock global del insumo en la tabla Insumo_Medico
+        UPDATE Insumo_Medico
+        SET stock = stock + NEW.cantidad
+        WHERE id_insumo = NEW.id_insumo;
 
-        -- Actualizar el inventario para cada item en el detalle del encargo
+        -- Actualizar o insertar la cantidad del insumo en el Inventario del hospital específico.
+        -- Si el insumo ya existe en el inventario del hospital, se suma la cantidad.
+        -- Si no existe, se inserta un nuevo registro.
         INSERT INTO Inventario (id_hospital, id_insumo, cantidad)
-        SELECT v_id_hospital, id_insumo, cantidad
-        FROM Encargo_Detalle
-        WHERE id_encargo = NEW.id_encargo
-        ON CONFLICT (id_hospital, id_insumo) DO UPDATE
-        SET cantidad = Inventario.cantidad + EXCLUDED.cantidad;
-    END IF;
+        VALUES (NEW.id_hospital, NEW.id_insumo, NEW.cantidad)
+    ON CONFLICT (id_hospital, id_insumo) DO UPDATE
+    SET cantidad = Inventario.cantidad + EXCLUDED.cantidad;
+
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER on_encargo_recibido
-AFTER UPDATE ON Encargo
+CREATE TRIGGER on_encargo_insert
+AFTER INSERT ON Encargo
 FOR EACH ROW
-EXECUTE FUNCTION trg_actualizar_stock_al_recibir();
+EXECUTE FUNCTION trg_actualizar_stock_al_recibir_encargo();
 
 
+
+
+
+
+
+
+
+
+
+-- Corregir los triggers 2,3,4,5,6 (creo que hay que corregirlos todos)
 -- TRIGGER 2: Descontar insumos del inventario cuando se usan en un evento clínico.
 CREATE OR REPLACE FUNCTION trg_descontar_insumo_usado()
 RETURNS TRIGGER AS $$
