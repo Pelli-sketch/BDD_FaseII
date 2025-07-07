@@ -1,97 +1,77 @@
-/*
- * SCRIPT DE CONSULTAS SQL
- * Responde a los requerimientos de consulta del proyecto.
- */
 
--- A. Obtener los nombres de los pacientes asegurados atendidos por médicos que han tenido más de un cargo en el hospital.
+
+-- A. Pacientes asegurados de médicos con >1 cargo/departamento.
 SELECT DISTINCT p.nombre, p.apellido
 FROM Persona p
-JOIN Paciente pa ON p.ci = pa.ci_paciente
-JOIN Afiliacion_Seguro afs ON pa.ci_paciente = afs.ci_paciente
-JOIN Evento_Clinico ec ON pa.ci_paciente = ec.ci_paciente
-WHERE ec.ci_medico IN (
-    -- Subconsulta para obtener los médicos con más de un cargo registrado
-    SELECT ci_personal
-    FROM Cargo_Historial
-    GROUP BY ci_personal
-    HAVING COUNT(id_cargo) > 1
+JOIN Paciente pa ON p.ci = pa.ci
+JOIN Seguro_Medico sm ON pa.ci = sm.ci_paciente
+WHERE pa.ci IN (
+    SELECT DISTINCT c.ci_paciente FROM Consulta c
+    WHERE c.ci_medico IN (SELECT ci_personal FROM Asignado_A GROUP BY ci_personal HAVING COUNT(*) > 1)
+    UNION
+    SELECT DISTINCT o.ci_paciente FROM Operacion o
+    WHERE o.ci_med IN (SELECT ci_personal FROM Asignado_A GROUP BY ci_personal HAVING COUNT(*) > 1)
 );
--- PRUEBA: Debería listar a Juan Castro, Elena Silva, Ricardo Paez, etc., si fueron atendidos por Carlos Gomez (CI V101).
 
-
--- B. Listar los hospitales que hayan facturado más de $1000.
-SELECT h.nombre, SUM(f.total) AS facturacion_total
+-- B. Hospitales que hayan facturado más de $1000.
+SELECT h.nombre, SUM(f.monto) as facturacion_total
 FROM Hospital h
-JOIN Evento_Clinico ec ON h.id_hospital = ec.id_hospital
-JOIN Factura f ON ec.id_evento = f.id_evento
-GROUP BY h.id_hospital, h.nombre
-HAVING SUM(f.total) > 1000;
--- PRUEBA: Debería listar al 'Centro Médico Valencia' y 'Hospital Metropolitano Central' debido a las operaciones costosas.
-
+JOIN Departamento d ON h.id_hospital = d.id_hospital
+JOIN Asignado_A aa ON d.id_departamento = aa.id_departamento
+JOIN Administrativo a ON aa.ci_personal = a.ci
+JOIN Emitida e ON a.ci = e.ci_administrativo
+JOIN Factura f ON e.num_factura = f.num_factura
+GROUP BY h.nombre
+HAVING SUM(f.monto) > 1000;
 
 -- C. Top 2 de médicos con más procedimientos realizados que el promedio.
-WITH ConteoProcedimientos AS (
-    SELECT ci_medico, COUNT(id_evento) as num_procedimientos
-    FROM Evento_Clinico
-    GROUP BY ci_medico
+WITH MedicoProcedimientos AS (
+    SELECT ci_medico AS ci, COUNT(*) as num_procedimientos FROM Consulta GROUP BY ci_medico
+    UNION ALL
+    SELECT ci_med AS ci, COUNT(*) as num_procedimientos FROM Operacion GROUP BY ci_med
 ),
-PromedioGlobal AS (
-    SELECT AVG(num_procedimientos) as promedio
-    FROM ConteoProcedimientos
+TotalProcedimientos AS (
+    SELECT ci, SUM(num_procedimientos) as total_procs FROM MedicoProcedimientos GROUP BY ci
 )
-SELECT p.nombre, p.apellido, cp.num_procedimientos
-FROM ConteoProcedimientos cp
-JOIN Persona p ON cp.ci_medico = p.ci
-WHERE cp.num_procedimientos > (SELECT promedio FROM PromedioGlobal)
-ORDER BY cp.num_procedimientos DESC
+SELECT p.nombre, p.apellido, tp.total_procs
+FROM TotalProcedimientos tp
+JOIN Persona p ON tp.ci = p.ci
+WHERE tp.total_procs > (SELECT AVG(total_procs) FROM TotalProcedimientos)
+ORDER BY tp.total_procs DESC
 LIMIT 2;
--- PRUEBA: Dependerá de la distribución de eventos en los datos, pero buscará a los médicos más activos.
 
-
--- D. Listar los trabajadores que han sido responsables de encargos a proveedores de "Valencia".
+-- D. Trabajadores responsables de encargos a proveedores de "Valencia".
 SELECT DISTINCT p.nombre, p.apellido
 FROM Persona p
-JOIN Personal pe ON p.ci = pe.ci_personal
-JOIN Encargo e ON pe.ci_personal = e.ci_responsable
-JOIN Proveedor pr ON e.id_proveedor = pr.id_proveedor
-WHERE pr.ciudad = 'Valencia';
--- PRUEBA: Debería listar a Laura Lopez (CI V106), que gestionó encargos para el proveedor 'Equipos Médicos de Venezuela C.A.' y 'Pfizer' de Valencia.
+JOIN Encargo e ON p.ci = e.ci_resp
+JOIN Proveedor pr ON e.nombre_compania = pr.nombre_compania
+WHERE pr.ciudad_prov = 'Valencia';
 
-
--- E. Listar los procedimientos que necesiten instrumental que ha sido encargado en el último mes.
-SELECT ec.id_evento, ec.tipo, ec.descripcion, p.nombre AS paciente
-FROM Evento_Clinico ec
-JOIN Evento_Usa_Insumo eui ON ec.id_evento = eui.id_evento
-JOIN Insumo_Medico im ON eui.id_insumo = im.id_insumo
-JOIN Persona p ON ec.ci_paciente = p.ci
-WHERE im.tipo = 'Instrumental' AND eui.id_insumo IN (
-    -- Subconsulta para obtener insumos encargados en el último mes
-    SELECT DISTINCT ed.id_insumo
-    FROM Encargo_Detalle ed
-    JOIN Encargo en ON ed.id_encargo = en.id_encargo
-    WHERE en.fecha_encargo >= (CURRENT_DATE - INTERVAL '1 month')
+-- E. Procedimientos que necesiten instrumental encargado en el último mes.
+SELECT proc.nombre
+FROM Procedimiento proc
+JOIN Necesitan n ON proc.id_procedimiento = n.id_procedimiento
+JOIN Insumo_Medico im ON n.id_insumo = im.id_insumo
+WHERE im.tipo_insumo = 'Instrumental' AND n.id_insumo IN (
+    SELECT id_insumo FROM Encargo WHERE fecha >= (CURRENT_DATE - INTERVAL '1 month')
 );
--- PRUEBA: Listaría el evento 5 (operación) si el encargo de 'Monitor Cardíaco' se hizo en el último mes.
-
 
 -- F. Departamentos que tengan más horas de trabajo que el promedio.
 WITH HorasPorDepto AS (
     SELECT
-        p.id_hospital_actual,
-        p.numero_departamento_actual,
-        SUM(EXTRACT(EPOCH FROM (ht.hora_salida - ht.hora_entrada)) / 3600) AS horas_semanales_totales
-    FROM Horario_Trabajo ht
-    JOIN Personal p ON ht.ci_personal = p.ci_personal
-    WHERE p.id_hospital_actual IS NOT NULL
-    GROUP BY p.id_hospital_actual, p.numero_departamento_actual
+        a.id_departamento,
+        COUNT(te.ci_personal) * (EXTRACT(EPOCH FROM (h.hora_finalizacion - h.hora_comienzo)) / 3600) AS horas_totales
+    FROM Horario_de_Atencion h
+    JOIN Trabaja_En te ON h.id_horario = te.id_horario
+    JOIN Asignado_A a ON te.ci_personal = a.ci_personal
+    GROUP BY a.id_departamento, h.hora_finalizacion, h.hora_comienzo
 ),
-PromedioHoras AS (
-    SELECT AVG(horas_semanales_totales) as promedio_general
-    FROM HorasPorDepto
+SumaHorasDepto AS (
+    SELECT id_departamento, SUM(horas_totales) as total_horas
+    FROM HorasPorDepto GROUP BY id_departamento
 )
-SELECT h.nombre AS hospital, d.nombre AS departamento, hpd.horas_semanales_totales
-FROM HorasPorDepto hpd
-JOIN Departamento d ON hpd.id_hospital_actual = d.id_hospital AND hpd.numero_departamento_actual = d.numero_departamento
-JOIN Hospital h ON hpd.id_hospital_actual = h.id_hospital
-WHERE hpd.horas_semanales_totales > (SELECT promedio_general FROM PromedioHoras);
--- PRUEBA: Listará los departamentos con más personal o con jornadas más largas, superando la media.
+SELECT h.nombre as hospital, d.nombre as departamento, shd.total_horas
+FROM SumaHorasDepto shd
+JOIN Departamento d ON shd.id_departamento = d.id_departamento
+JOIN Hospital h ON d.id_hospital = h.id_hospital
+WHERE shd.total_horas > (SELECT AVG(total_horas) FROM SumaHorasDepto);
