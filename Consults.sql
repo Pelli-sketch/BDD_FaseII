@@ -1,6 +1,6 @@
 
 
--- A. Pacientes asegurados de médicos con >1 cargo/departamento.
+-- A. Pacientes asegurados de médicos con más de 1 cargo/departamento.
 SELECT DISTINCT p.nombre, p.apellido
 FROM Persona p
 JOIN Paciente pa ON p.ci = pa.ci
