@@ -36,7 +36,7 @@ INSERT INTO Seguro_Medico (num_poliza, nombre_aseguradora, ci_paciente, suma_asg
 INSERT INTO Procedimiento (nombre, precio) VALUES ('Consulta Cardiológica', 100), ('Consulta General', 80), ('Operación de Rodilla', 3000), ('Radiografía', 80);
 INSERT INTO Consulta (hora, fecha, ci_medico, ci_paciente, id_procedimiento) VALUES
 ('09:00', '2023-10-10', 'V101', 'V201', 1), ('10:00', '2023-10-11', 'V101', 'V202', 1), ('11:00', '2023-10-12', 'V101', 'V203', 1),
-('14:00', '2023-11-15', 'V105', 'V201', 2), ('15:00', '2023-11-16', 'V105', 'V202', 2);
+('14:00', '2023-11-15', 'V105', 'V201', 2), ('15:00', '2023-11-16', 'V105', 'V202', 2), ('12:00', '2023-11-18', 'V201', 'V202', 2);
 INSERT INTO Habitacion (num_habitacion, id_hospital, id_departamento, num_camas, tarifa, tipo) VALUES (301, 2, 4, 1, 200, 'individual');
 INSERT INTO Operacion (id_procedimiento, id_departamento, id_hospital, ci_med, ci_paciente, id_habitacion, total, hora_operacion, fecha) VALUES
 (3, 4, 2, 'V102', 'V202', 1, 3500, '08:00', '2023-11-20');
