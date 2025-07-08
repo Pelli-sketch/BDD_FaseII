@@ -32,6 +32,9 @@ DROP TABLE IF EXISTS Procedimiento CASCADE;
 DROP TABLE IF EXISTS Insumo_Medico CASCADE;
 DROP TABLE IF EXISTS Proveedor CASCADE;
 DROP TABLE IF EXISTS Persona CASCADE;
+DROP TABLE IF EXISTS asignado_a CASCADE;
+DROP TABLE IF EXISTS historial_cargo_personal CASCADE;
+
 
 -- Creación de las tablas
 CREATE TABLE Persona (
@@ -265,6 +268,17 @@ CREATE TABLE Trabaja_En (
     PRIMARY KEY (id_horario, ci_personal),
     FOREIGN KEY (id_horario) REFERENCES Horario_de_Atencion (id_horario) ON DELETE CASCADE,
     FOREIGN KEY (ci_personal) REFERENCES Personal (ci) ON DELETE CASCADE
+);
+
+CREATE TABLE Historial_Cargo_Personal (
+    id_historial SERIAL PRIMARY KEY,
+    ci_personal VARCHAR(20) NOT NULL,
+    cargo_anterior VARCHAR(100) NOT NULL,
+    salario_anterior NUMERIC(12, 2) NOT NULL CHECK (salario_anterior >= 0),
+    fecha_inicio DATE NOT NULL,
+    fecha_fin DATE, -- Será NULL si es el cargo actual del trabajador
+    FOREIGN KEY (ci_personal) REFERENCES Personal(ci) ON DELETE CASCADE,
+    CHECK (fecha_fin IS NULL OR fecha_fin >= fecha_inicio)
 );
 
 -- ========================= TRIGGERS =========================
